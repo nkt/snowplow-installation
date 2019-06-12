@@ -1,0 +1,28 @@
+source = nsq
+
+sink {
+  good = "elasticsearch"
+  bad = "nsq"
+}
+
+nsq {
+  nsqdHost = nsqd
+  nsqdPort = 4150
+
+  nsqlookupdHost = nsqlookupd
+  nsqlookupdPort = 4161
+}
+
+elasticsearch {
+  client {
+    endpoint = odfe-node1
+    port = 9200
+    ssl = true
+  }
+
+  cluster {
+    name = snowplow-odfe-cluster
+    index = snowplow-metrics
+    # clusterType = "{{elasticsearchType}}"
+  }
+}

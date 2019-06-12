@@ -1,0 +1,15 @@
+{
+  "name": "stress-test",
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "snowplow-tracker": "^0.3.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Nikita Gusakov <gusnkt@gmail.com>",
+  "license": "MIT"
+}

@@ -1,0 +1,135 @@
+version: "3"
+
+services:
+  nsqlookupd:
+    image: nsqio/nsq:v1.0.0-compat
+    command: /nsqlookupd
+    ports:
+      - "4160:4160"
+      - "4161:4161"
+
+  nsqd:
+    image: nsqio/nsq:v1.0.0-compat
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --data-path=/data
+    volumes:
+      - nsqd:/data
+    depends_on:
+      - nsqlookupd
+    ports:
+      - "4150:4150"
+      - "4151:4151"
+
+  nsq_pubsub:
+    image: nsqio/nsq:v1.0.0-compat
+    command: /nsq_pubsub --lookupd-http-address=nsqlookupd:4161 --http-address=0.0.0.0:8081
+    depends_on:
+      - nsqlookupd
+    ports:
+      - "8081:8081"
+
+  nsqadmin:
+    image: nsqio/nsq:v1.0.0-compat
+    command: /nsqadmin --lookupd-http-address=nsqlookupd:4161
+    depends_on:
+      - nsqlookupd
+    ports:
+      - "4171:4171"
+
+  snowplow-stream-collector:
+    image: snowplow-docker-registry.bintray.io/snowplow/scala-stream-collector-nsq:0.15.0
+    command: [ "--config", "/snowplow/config/config.hocon" ]
+    depends_on:
+      - nsqd
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/stream-collector:/snowplow/config
+    logging:
+      options:
+        max-size: 1M
+        max-file: "10"
+    environment:
+      - "SP_JAVA_OPTS=-Xms512m -Xmx512m"
+
+  snowplow-stream-enrich:
+    image: snowplow-docker-registry.bintray.io/snowplow/stream-enrich-nsq:0.21.0
+    command: [
+      "--config", "/snowplow/config/config.hocon",
+      "--resolver", "file:/snowplow/config/resolver.json",
+      "--enrichments", "file:/snowplow/config/enrichments",
+      "--force-cached-files-download"
+    ]
+    depends_on:
+      - snowplow-stream-collector
+    volumes:
+      - ./config/stream-enrich:/snowplow/config
+    logging:
+      options:
+        max-size: 1M
+        max-file: "10"
+    environment:
+      - "SP_JAVA_OPTS=-Xms512m -Xmx512m"
+
+  snowplow-elasticsearch-loader:
+    image: snowplow-docker-registry.bintray.io/snowplow/elasticsearch-loader:0.10.2
+    command: [
+      "--config", "/snowplow/config/config.hocon"
+    ]
+    depends_on:
+      - snowplow-stream-enrich
+    volumes:
+      - ./config/elasticsearch-loader:/snowplow/config
+    logging:
+      options:
+        max-size: 1M
+        max-file: "10"
+    environment:
+      - "SP_JAVA_OPTS=-Xms512m -Xmx512m"
+
+  odfe-node1:
+    image: amazon/opendistro-for-elasticsearch:0.9.0
+    container_name: odfe-node1
+    environment:
+      - cluster.name=snowplow-odfe-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - odfe-data1:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+      - 9600:9600
+
+  # odfe-node2:
+  #   image: amazon/opendistro-for-elasticsearch:0.9.0
+  #   container_name: odfe-node2
+  #   environment:
+  #     - cluster.name=snowplow-odfe-cluster
+  #     - bootstrap.memory_lock=true
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  #     - discovery.zen.ping.unicast.hosts=odfe-node1
+  #   ulimits:
+  #     memlock:
+  #       soft: -1
+  #       hard: -1
+  #   volumes:
+  #     - odfe-data2:/usr/share/elasticsearch/data
+
+  kibana:
+    image: amazon/opendistro-for-elasticsearch-kibana:0.9.0
+    container_name: odfe-kibana
+    ports:
+      - 5601:5601
+    expose:
+      - "5601"
+    environment:
+      ELASTICSEARCH_URL: https://odfe-node1:9200
+      ELASTICSEARCH_HOSTS: https://odfe-node1:9200
+
+volumes:
+  nsqd:
+  odfe-data1:
+  odfe-data2:
